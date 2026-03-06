@@ -6,7 +6,7 @@ from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
     FollowEvent, PostbackEvent,
     TemplateSendMessage, ButtonsTemplate,
-    PostbackAction, PostbackTemplateAction
+    PostbackTemplateAction
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 import database as db
@@ -32,7 +32,6 @@ def webhook():
         abort(400)
     return "OK"
 
-# ===== Add Friend =====
 @handler.add(FollowEvent)
 def handle_follow(event):
     user_id = event.source.user_id
@@ -45,25 +44,22 @@ def handle_follow(event):
         ]
     )
 
-# ===== รับข้อความ =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
     user = db.get_user(user_id)
 
-    # ถ้ายังไม่มีชื่อ → รับชื่อ
     if user and not user["name"]:
         db.update_user_name(user_id, text)
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text=f"ขอบคุณค่ะ คุณ{text} 🙏\nลงทะเบียนเรียบร้อยแล้ว!\n\nระบบจะส่งแจ้งเตือนกินยาทุกเช้า 08:00 น. นะคะ 💊\nถ้ามีอาการผิดปกติพิมพ์ว่า 'ฉุกเฉิน' ได้เลยค่ะ"
+                text=f"ขอบคุณค่ะ คุณ{text} 🙏\nลงทะเบียนเรียบร้อยแล้ว!\n\nระบบจะส่งแจ้งเตือนกินยาทุกเช้า 08:00 น. นะคะ 💊\nถ้ามีอาการผิดปกติพิมพ์ว่า ฉุกเฉิน ได้เลยค่ะ"
             )
         )
         return
 
-    # คำฉุกเฉิน
     urgent_words = ["ฉุกเฉิน", "ใจสั่น", "เจ็บหน้าอก", "หายใจไม่ออก", "หน้ามืด"]
     if any(w in text for w in urgent_words):
         db.save_alert(user_id, "urgent", text)
@@ -79,11 +75,10 @@ def handle_message(event):
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(
-            text="รับทราบค่ะ 😊\nถ้ามีอาการผิดปกติพิมพ์ว่า 'ฉุกเฉิน' ได้เลยนะคะ\nหรือรอแจ้งเตือนกินยาตอนเช้า 08:00 น. ค่ะ"
+            text="รับทราบค่ะ 😊\nถ้ามีอาการผิดปกติพิมพ์ว่า ฉุกเฉิน ได้เลยนะคะ"
         )
     )
 
-# ===== กดปุ่ม =====
 @handler.add(PostbackEvent)
 def handle_postback(event):
     data = dict(x.split("=") for x in event.postback.data.split("&"))
@@ -102,26 +97,19 @@ def handle_postback(event):
                 text=f"เยี่ยมมากเลยค่ะ คุณ{name}! 🎉\nได้รับ +10 Health Points\nสะสมแล้ว {points} แต้มค่ะ ✨"
             )
         )
-
     elif action == "skipped":
         db.log_medication(user_id, "skipped")
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(
-                text="ไม่เป็นไรนะคะ 💙\nอย่าลืมกินยาในมื้อถัดไปด้วยนะคะ"
-            )
+            TextSendMessage(text="ไม่เป็นไรนะคะ 💙\nอย่าลืมกินยาในมื้อถัดไปด้วยนะคะ")
         )
-
     elif action == "adr":
         db.save_alert(user_id, "warning", "ผู้ป่วยกดแจ้งอาการผิดปกติ")
         notify_pharmacist(user_id, "🟡 ผู้ป่วยกดแจ้งอาการผิดปกติ")
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(
-                text="รับทราบค่ะ ⚠️\nเภสัชกรจะติดต่อกลับเร็วๆ นี้นะคะ 📞"
-            )
+            TextSendMessage(text="รับทราบค่ะ ⚠️\nเภสัชกรจะติดต่อกลับเร็วๆ นี้นะคะ 📞")
         )
-
     elif action == "checkin_ok":
         db.log_medication(user_id, "checkin_ok")
         db.add_points(user_id, 20)
@@ -133,7 +121,6 @@ def handle_postback(event):
             )
         )
 
-# ===== แจ้งเตือนเภสัชกร =====
 def notify_pharmacist(patient_id, reason):
     if not PHARMACIST_LINE_ID:
         return
@@ -144,18 +131,10 @@ def notify_pharmacist(patient_id, reason):
     line_bot_api.push_message(
         PHARMACIST_LINE_ID,
         TextSendMessage(
-            text=f"""🚨 แจ้งเตือนจาก Oso-Care
-━━━━━━━━━━━━━━━
-ผู้ป่วย: {name}
-เหตุผล: {reason}
-ยา: {med}
-Health Points: {points} แต้ม
-━━━━━━━━━━━━━━━
-กรุณาติดต่อกลับโดยด่วนค่ะ"""
+            text=f"🚨 แจ้งเตือนจาก Oso-Care\n━━━━━━━━━━━━━━━\nผู้ป่วย: {name}\nเหตุผล: {reason}\nยา: {med}\nHealth Points: {points} แต้ม\n━━━━━━━━━━━━━━━\nกรุณาติดต่อกลับโดยด่วนค่ะ"
         )
     )
 
-# ===== Reminder ทุกวัน =====
 def send_daily_reminder():
     users = db.get_all_active_users()
     for user in users:
