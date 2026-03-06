@@ -52,7 +52,7 @@ def setup_rich_menu():
         "size": {"width": 2500, "height": 1686},
         "selected": True,
         "name": "Oso-Care Main Menu",
-        "chatBarText": "💊 เมนูหลัก",
+        "chatBarText": "Oso-Care Menu",
         "areas": [
             {
                 "bounds": {"x": 0,    "y": 0,   "width": 833, "height": 843},
@@ -108,21 +108,21 @@ def setup_rich_menu():
 
 
 def generate_rich_menu_image():
-    """สร้างรูป Rich Menu 2500x1686 ด้วย Pillow แล้วคืนเป็น bytes"""
+    """Generate Rich Menu image 2500x1686 using English only — works on Railway"""
     from PIL import Image, ImageDraw, ImageFont
     import io
 
     W, H = 2500, 1686
     BW, BH = W // 3, H // 2
-    PAD = 20
+    PAD = 22
 
     CARDS = [
-        {"en": "TOOK MED",   "th": "กินยาแล้ว",       "note": "บันทึกการกินยา",   "bg": "#1e8449", "top": "#27ae60"},
-        {"en": "SKIP",       "th": "ยังไม่ได้กิน",    "note": "เตือนอีกครั้ง",    "bg": "#2c3e50", "top": "#7f8c8d"},
-        {"en": "SYMPTOMS",   "th": "มีอาการผิดปกติ",  "note": "แจ้งเภสัชกร",      "bg": "#c0392b", "top": "#e74c3c"},
-        {"en": "MY POINTS",  "th": "แต้มของฉัน",      "note": "แลกส่วนลด",        "bg": "#b7950b", "top": "#f1c40f"},
-        {"en": "CHANGE MED", "th": "เปลี่ยนยา",       "note": "อัพเดทชื่อยา",     "bg": "#16a085", "top": "#1abc9c"},
-        {"en": "EMERGENCY",  "th": "ฉุกเฉิน",          "note": "แจ้งด่วน",         "bg": "#922b21", "top": "#e74c3c"},
+        {"line1": "TOOK MED",   "line2": "Record medicine", "bg": "#1e8449", "top": "#2ecc71"},
+        {"line1": "SKIP",       "line2": "Remind me later", "bg": "#2c3e50", "top": "#7f8c8d"},
+        {"line1": "SYMPTOMS",   "line2": "Alert pharmacist","bg": "#c0392b", "top": "#e74c3c"},
+        {"line1": "MY POINTS",  "line2": "Redeem discount", "bg": "#b7950b", "top": "#f39c12"},
+        {"line1": "CHANGE MED", "line2": "Update medicine", "bg": "#16a085", "top": "#1abc9c"},
+        {"line1": "EMERGENCY",  "line2": "Call pharmacist", "bg": "#922b21", "top": "#e74c3c"},
     ]
 
     def hex2rgb(h):
@@ -131,9 +131,9 @@ def generate_rich_menu_image():
 
     def get_font(size):
         for p in [
-            "/usr/share/fonts/opentype/tlwg/Loma-Bold.otf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         ]:
             if os.path.exists(p):
                 try:
@@ -142,10 +142,22 @@ def generate_rich_menu_image():
                     pass
         return ImageFont.load_default()
 
-    img = Image.new("RGB", (W, H), hex2rgb("#1a4731"))
+    def get_font_regular(size):
+        for p in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]:
+            if os.path.exists(p):
+                try:
+                    return ImageFont.truetype(p, size)
+                except:
+                    pass
+        return ImageFont.load_default()
+
+    img = Image.new("RGB", (W, H), hex2rgb("#1a3a2a"))
     draw = ImageDraw.Draw(img)
-    f_en   = get_font(78)
-    f_note = get_font(46)
+    f_big  = get_font(88)
+    f_sub  = get_font_regular(50)
 
     for i, card in enumerate(CARDS):
         c, r = i % 3, i // 3
@@ -154,31 +166,42 @@ def generate_rich_menu_image():
         x2 = x1 + BW - PAD * 2
         y2 = y1 + BH - PAD * 2
         cx = (x1 + x2) // 2
+        cy = (y1 + y2) // 2
 
-        draw.rounded_rectangle([x1, y1, x2, y2], radius=40, fill=hex2rgb(card["bg"]))
-        draw.rounded_rectangle([x1+28, y1, x2-28, y1+50], radius=16, fill=hex2rgb(card["top"]))
-        draw.rectangle([x1+28, y1+25, x2-28, y1+50], fill=hex2rgb(card["top"]))
+        # Card background
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=44,
+                                fill=hex2rgb(card["bg"]))
 
-        mid_y = (y1 + y2) // 2
+        # Top accent bar
+        draw.rounded_rectangle([x1+32, y1, x2-32, y1+56],
+                                radius=18, fill=hex2rgb(card["top"]))
+        draw.rectangle([x1+32, y1+28, x2-32, y1+56],
+                       fill=hex2rgb(card["top"]))
 
-        # English label (renders ชัดเจนทุก environment)
+        # Main label (big bold English)
         try:
-            ew = int(draw.textlength(card["en"], font=f_en))
+            lw = int(draw.textlength(card["line1"], font=f_big))
         except:
-            ew = len(card["en"]) * 42
-        draw.text((cx - ew // 2, mid_y - 70), card["en"], font=f_en, fill=(255, 255, 255))
+            lw = len(card["line1"]) * 50
+        draw.text((cx - lw // 2, cy - 80), card["line1"],
+                  font=f_big, fill=(255, 255, 255))
 
-        # Note
+        # Divider
+        draw.line([(cx - 90, cy + 24), (cx + 90, cy + 24)],
+                  fill=hex2rgb(card["top"]), width=4)
+
+        # Sub label
         try:
-            nw = int(draw.textlength(card["note"], font=f_note))
+            sw = int(draw.textlength(card["line2"], font=f_sub))
         except:
-            nw = len(card["note"]) * 24
-        draw.text((cx - nw // 2, mid_y + 26), card["note"], font=f_note, fill=(200, 230, 210))
+            sw = len(card["line2"]) * 28
+        draw.text((cx - sw // 2, cy + 36), card["line2"],
+                  font=f_sub, fill=(210, 240, 220))
 
-    # Grid lines
+    # Grid dividers
     for i in [1, 2]:
-        draw.line([(i * BW, 2), (i * BW, H - 2)], fill=(255, 255, 255, 20), width=3)
-    draw.line([(2, H // 2), (W - 2, H // 2)], fill=(255, 255, 255, 20), width=3)
+        draw.line([(i * BW, 0), (i * BW, H)], fill=(255,255,255,15), width=2)
+    draw.line([(0, H // 2), (W, H // 2)], fill=(255,255,255,15), width=2)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
