@@ -50,16 +50,58 @@ def handle_message(event):
     text = event.message.text.strip()
     user = db.get_user(user_id)
 
+    # ลงทะเบียนชื่อ
     if user and not user["name"]:
         db.update_user_name(user_id, text)
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text=f"ขอบคุณค่ะ คุณ{text} 🙏\nลงทะเบียนเรียบร้อยแล้ว!\n\nระบบจะส่งแจ้งเตือนกินยาทุกเช้า 08:00 น. นะคะ 💊\nถ้ามีอาการผิดปกติพิมพ์ว่า ฉุกเฉิน ได้เลยค่ะ"
+                text=f"ขอบคุณค่ะ คุณ{text} 🙏\nลงทะเบียนเรียบร้อยแล้ว!\n\nพิมพ์ได้เลยนะคะ:\n💊 'ทดสอบแจ้งเตือน' — ทดสอบปุ่มกินยา\n🔴 'ฉุกเฉิน' — แจ้งเภสัชกรทันที"
             )
         )
         return
 
+    # ทดสอบแจ้งเตือนกินยา
+    if text == "ทดสอบแจ้งเตือน":
+        name = user["name"] if user else "คุณ"
+        med = user["med_name"] if user else "ยาตามใบสั่ง"
+        line_bot_api.reply_message(
+            event.reply_token,
+            TemplateSendMessage(
+                alt_text="ทดสอบแจ้งเตือนกินยา",
+                template=ButtonsTemplate(
+                    title=f"สวัสดีตอนเช้า คุณ{name} 🌅",
+                    text=f"ถึงเวลากิน {med} แล้วนะคะ 💊",
+                    actions=[
+                        PostbackTemplateAction(label="✅ กินแล้ว", data="action=taken"),
+                        PostbackTemplateAction(label="⏰ ยังไม่ได้กิน", data="action=skipped"),
+                        PostbackTemplateAction(label="⚠️ มีอาการผิดปกติ", data="action=adr")
+                    ]
+                )
+            )
+        )
+        return
+
+    # ทดสอบ weekly checkin
+    if text == "ทดสอบเช็กอิน":
+        name = user["name"] if user else "คุณ"
+        line_bot_api.reply_message(
+            event.reply_token,
+            TemplateSendMessage(
+                alt_text="ทดสอบเช็กอินประจำสัปดาห์",
+                template=ButtonsTemplate(
+                    title=f"💙 ครบ 7 วันแล้วนะคะ คุณ{name}!",
+                    text="ช่วงสัปดาห์ที่ผ่านมาเป็นยังไงบ้างคะ?",
+                    actions=[
+                        PostbackTemplateAction(label="😊 ปกติดี ไม่มีอะไร", data="action=checkin_ok"),
+                        PostbackTemplateAction(label="⚠️ มีอาการผิดปกติ", data="action=adr")
+                    ]
+                )
+            )
+        )
+        return
+
+    # คำฉุกเฉิน
     urgent_words = ["ฉุกเฉิน", "ใจสั่น", "เจ็บหน้าอก", "หายใจไม่ออก", "หน้ามืด"]
     if any(w in text for w in urgent_words):
         db.save_alert(user_id, "urgent", text)
@@ -72,10 +114,11 @@ def handle_message(event):
         )
         return
 
+    # เมนูช่วยเหลือ
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(
-            text="รับทราบค่ะ 😊\nถ้ามีอาการผิดปกติพิมพ์ว่า ฉุกเฉิน ได้เลยนะคะ"
+            text="พิมพ์ได้เลยนะคะ 😊\n\n💊 'ทดสอบแจ้งเตือน' — ทดสอบปุ่มกินยา\n📋 'ทดสอบเช็กอิน' — ทดสอบเช็กอินสัปดาห์\n🔴 'ฉุกเฉิน' — แจ้งเภสัชกรทันที"
         )
     )
 
