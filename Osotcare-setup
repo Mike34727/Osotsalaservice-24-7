@@ -1,0 +1,226 @@
+"""
+setup_richmenu.py
+รันบนเครื่องของคุณ 1 ครั้ง เพื่อสร้าง Rich Menu บน LINE OA
+
+วิธีใช้:
+  1. pip install requests pillow
+  2. ใส่ CHANNEL_ACCESS_TOKEN ด้านล่าง
+  3. วาง richmenu.png ไว้ในโฟลเดอร์เดียวกัน (หรือใช้ generate_image() สร้างเองอัตโนมัติ)
+  4. python setup_richmenu.py
+"""
+
+import requests
+import json
+import os
+from PIL import Image, ImageDraw, ImageFont
+
+# ─── CONFIG ────────────────────────────────────────────────────────────────────
+CHANNEL_ACCESS_TOKEN = "YOUR_CHANNEL_ACCESS_TOKEN_HERE"  # ใส่ token จาก LINE Developers
+IMAGE_PATH = "richmenu.png"
+# ────────────────────────────────────────────────────────────────────────────────
+
+HEADERS = {
+    "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# ─── Rich Menu Layout (2x3 grid, 2500x1686) ────────────────────────────────────
+RICH_MENU = {
+    "size": {"width": 2500, "height": 1686},
+    "selected": True,
+    "name": "Oso-Care Main Menu",
+    "chatBarText": "💊 เมนู Oso-Care",
+    "areas": [
+        # Row 1
+        {
+            "bounds": {"x": 0,    "y": 0, "width": 833, "height": 843},
+            "action": {"type": "postback", "data": "action=taken",     "displayText": "✅ กินยาแล้ว"}
+        },
+        {
+            "bounds": {"x": 833,  "y": 0, "width": 834, "height": 843},
+            "action": {"type": "postback", "data": "action=skipped",   "displayText": "⏰ ยังไม่ได้กิน"}
+        },
+        {
+            "bounds": {"x": 1667, "y": 0, "width": 833, "height": 843},
+            "action": {"type": "postback", "data": "action=adr",       "displayText": "⚠️ มีอาการผิดปกติ"}
+        },
+        # Row 2
+        {
+            "bounds": {"x": 0,    "y": 843, "width": 833, "height": 843},
+            "action": {"type": "message", "text": "แต้มของฉัน"}
+        },
+        {
+            "bounds": {"x": 833,  "y": 843, "width": 834, "height": 843},
+            "action": {"type": "message", "text": "เปลี่ยนยา"}
+        },
+        {
+            "bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
+            "action": {"type": "message", "text": "ฉุกเฉิน"}
+        },
+    ]
+}
+
+def generate_image_fallback():
+    """สร้าง Rich Menu image อัตโนมัติ ถ้าไม่มีไฟล์ PNG"""
+    print("📸 Generating Rich Menu image...")
+
+    W, H = 2500, 1686
+    BW, BH = W // 3, H // 2
+
+    CARDS = [
+        {"label": "TOOK MED",    "sub": "กินยาแล้ว",       "bg": "#1e8449", "top": "#27ae60"},
+        {"label": "SKIP",        "sub": "ยังไม่ได้กิน",    "bg": "#2c3e50", "top": "#5d6d7e"},
+        {"label": "SYMPTOMS",    "sub": "มีอาการผิดปกติ",  "bg": "#c0392b", "top": "#e74c3c"},
+        {"label": "MY POINTS",   "sub": "แต้มของฉัน",      "bg": "#d4ac0d", "top": "#f1c40f"},
+        {"label": "CHANGE MED",  "sub": "เปลี่ยนยา",       "bg": "#16a085", "top": "#1abc9c"},
+        {"label": "EMERGENCY",   "sub": "ฉุกเฉิน",          "bg": "#922b21", "top": "#c0392b"},
+    ]
+
+    img = Image.new("RGB", (W, H), "#1a4731")
+    draw = ImageDraw.Draw(img)
+
+    # Try to load Thai font
+    thai_fonts = [
+        "/usr/share/fonts/opentype/tlwg/Loma-Bold.otf",
+        "/usr/share/fonts/truetype/thai/Sarabun-Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Unicode MS.ttf",  # macOS
+        "C:/Windows/Fonts/tahoma.ttf",  # Windows
+    ]
+    def get_font(size):
+        for p in thai_fonts:
+            if os.path.exists(p):
+                return ImageFont.truetype(p, size)
+        # Fallback
+        for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+            if os.path.exists(p):
+                return ImageFont.truetype(p, size)
+        return ImageFont.load_default()
+
+    f_main = get_font(80)
+    f_sub  = get_font(54)
+
+    for i, card in enumerate(CARDS):
+        c, r = i % 3, i // 3
+        x1, y1 = c * BW + 18, r * BH + 18
+        x2, y2 = x1 + BW - 36, y1 + BH - 36
+        cx = (x1 + x2) // 2
+
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=40, fill=card["bg"])
+        draw.rounded_rectangle([x1+28, y1, x2-28, y1+48], radius=14, fill=card["top"])
+        draw.rectangle([x1+28, y1+24, x2-28, y1+48], fill=card["top"])
+
+        # Main label (English — renders everywhere)
+        try:
+            lw = int(draw.textlength(card["label"], font=f_main))
+        except:
+            lw = len(card["label"]) * 45
+        draw.text((cx - lw//2, (y1+y2)//2 - 90), card["label"], font=f_main, fill="#ffffff")
+
+        # Sub label (Thai — best effort)
+        try:
+            sw = int(draw.textlength(card["sub"], font=f_sub))
+        except:
+            sw = len(card["sub"]) * 28
+        draw.text((cx - sw//2, (y1+y2)//2 + 14), card["sub"], font=f_sub, fill="#c8e6c9")
+
+    img.save(IMAGE_PATH, "PNG")
+    print(f"   Saved: {IMAGE_PATH}")
+
+
+def delete_existing_menus():
+    """ลบ Rich Menu เก่าทั้งหมด"""
+    print("🗑️  Deleting existing Rich Menus...")
+    r = requests.get(
+        "https://api.line.me/v2/bot/richmenu/list",
+        headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
+    )
+    menus = r.json().get("richmenus", [])
+    for m in menus:
+        requests.delete(
+            f"https://api.line.me/v2/bot/richmenu/{m['richMenuId']}",
+            headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
+        )
+        print(f"   Deleted: {m['richMenuId']}")
+
+
+def create_rich_menu():
+    """สร้าง Rich Menu structure"""
+    print("📋 Creating Rich Menu structure...")
+    r = requests.post(
+        "https://api.line.me/v2/bot/richmenu",
+        headers=HEADERS,
+        json=RICH_MENU
+    )
+    data = r.json()
+    if "richMenuId" not in data:
+        print(f"❌ Error: {data}")
+        return None
+    menu_id = data["richMenuId"]
+    print(f"   Created: {menu_id}")
+    return menu_id
+
+
+def upload_image(menu_id):
+    """Upload รูปภาพไปยัง Rich Menu"""
+    print(f"🖼️  Uploading image to {menu_id}...")
+    with open(IMAGE_PATH, "rb") as f:
+        r = requests.post(
+            f"https://api-data.line.me/v2/bot/richmenu/{menu_id}/content",
+            headers={
+                "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "image/png"
+            },
+            data=f.read()
+        )
+    if r.status_code == 200:
+        print("   Uploaded ✅")
+        return True
+    else:
+        print(f"   ❌ Upload failed: {r.text}")
+        return False
+
+
+def set_default(menu_id):
+    """ตั้งเป็น Default Rich Menu"""
+    print("📌 Setting as default menu...")
+    r = requests.post(
+        f"https://api.line.me/v2/bot/user/all/richmenu/{menu_id}",
+        headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
+    )
+    if r.status_code == 200:
+        print("   Set as default ✅")
+    else:
+        print(f"   ❌ Failed: {r.text}")
+
+
+if __name__ == "__main__":
+    print("=" * 50)
+    print("  Oso-Care Rich Menu Setup")
+    print("=" * 50)
+
+    if CHANNEL_ACCESS_TOKEN == "YOUR_CHANNEL_ACCESS_TOKEN_HERE":
+        print("❌ กรุณาใส่ CHANNEL_ACCESS_TOKEN ก่อนรัน script นะครับ")
+        exit(1)
+
+    # สร้าง image ถ้ายังไม่มี
+    if not os.path.exists(IMAGE_PATH):
+        print(f"⚠️  ไม่พบ {IMAGE_PATH} — กำลังสร้างอัตโนมัติ...")
+        generate_image_fallback()
+    else:
+        print(f"✅ พบ {IMAGE_PATH} แล้ว")
+
+    delete_existing_menus()
+    menu_id = create_rich_menu()
+    if not menu_id:
+        exit(1)
+
+    if not upload_image(menu_id):
+        exit(1)
+
+    set_default(menu_id)
+
+    print()
+    print("=" * 50)
+    print(f"✅ Rich Menu พร้อมใช้งานแล้ว!")
+    print(f"   Menu ID: {menu_id}")
+    print("=" * 50)
