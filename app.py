@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, request, abort, render_template_string
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -22,6 +23,170 @@ line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
 db.init_db()
+
+# ─────────────────────────── RICH MENU SETUP ────────────────────────────
+
+def setup_rich_menu():
+    """สร้าง Rich Menu 6 ปุ่มอัตโนมัติตอน startup"""
+    if not CHANNEL_ACCESS_TOKEN:
+        return
+
+    headers_json = {
+        "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    headers_auth = {
+        "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"
+    }
+
+    # ลบ menu เก่าทั้งหมดก่อน
+    try:
+        r = requests.get("https://api.line.me/v2/bot/richmenu/list", headers=headers_auth)
+        for m in r.json().get("richmenus", []):
+            requests.delete(f"https://api.line.me/v2/bot/richmenu/{m['richMenuId']}", headers=headers_auth)
+    except Exception as e:
+        print(f"Rich Menu cleanup error: {e}")
+
+    # สร้าง Rich Menu structure
+    menu_body = {
+        "size": {"width": 2500, "height": 1686},
+        "selected": True,
+        "name": "Oso-Care Main Menu",
+        "chatBarText": "💊 เมนู Oso-Care — แตะเพื่อเปิด",
+        "areas": [
+            {
+                "bounds": {"x": 0,    "y": 0,   "width": 833, "height": 843},
+                "action": {"type": "postback", "data": "action=taken",   "displayText": "✅ กินยาแล้ว"}
+            },
+            {
+                "bounds": {"x": 833,  "y": 0,   "width": 834, "height": 843},
+                "action": {"type": "postback", "data": "action=skipped", "displayText": "⏰ ยังไม่ได้กิน"}
+            },
+            {
+                "bounds": {"x": 1667, "y": 0,   "width": 833, "height": 843},
+                "action": {"type": "postback", "data": "action=adr",     "displayText": "⚠️ มีอาการผิดปกติ"}
+            },
+            {
+                "bounds": {"x": 0,    "y": 843, "width": 833, "height": 843},
+                "action": {"type": "message", "text": "แต้มของฉัน"}
+            },
+            {
+                "bounds": {"x": 833,  "y": 843, "width": 834, "height": 843},
+                "action": {"type": "message", "text": "เปลี่ยนยา"}
+            },
+            {
+                "bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
+                "action": {"type": "message", "text": "ฉุกเฉิน"}
+            },
+        ]
+    }
+
+    try:
+        r = requests.post("https://api.line.me/v2/bot/richmenu", headers=headers_json, json=menu_body)
+        menu_id = r.json().get("richMenuId")
+        if not menu_id:
+            print(f"Rich Menu create failed: {r.text}")
+            return
+
+        # Upload รูปภาพ (สร้างจาก Pillow)
+        img_bytes = generate_rich_menu_image()
+        requests.post(
+            f"https://api-data.line.me/v2/bot/richmenu/{menu_id}/content",
+            headers={"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}", "Content-Type": "image/png"},
+            data=img_bytes
+        )
+
+        # ตั้งเป็น default
+        requests.post(
+            f"https://api.line.me/v2/bot/user/all/richmenu/{menu_id}",
+            headers=headers_auth
+        )
+        print(f"✅ Rich Menu ready: {menu_id}")
+
+    except Exception as e:
+        print(f"Rich Menu setup error: {e}")
+
+
+def generate_rich_menu_image():
+    """สร้างรูป Rich Menu 2500x1686 ด้วย Pillow แล้วคืนเป็น bytes"""
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+
+    W, H = 2500, 1686
+    BW, BH = W // 3, H // 2
+    PAD = 20
+
+    CARDS = [
+        {"en": "TOOK MED",   "th": "กินยาแล้ว",       "note": "บันทึกการกินยา",   "bg": "#1e8449", "top": "#27ae60"},
+        {"en": "SKIP",       "th": "ยังไม่ได้กิน",    "note": "เตือนอีกครั้ง",    "bg": "#2c3e50", "top": "#7f8c8d"},
+        {"en": "SYMPTOMS",   "th": "มีอาการผิดปกติ",  "note": "แจ้งเภสัชกร",      "bg": "#c0392b", "top": "#e74c3c"},
+        {"en": "MY POINTS",  "th": "แต้มของฉัน",      "note": "แลกส่วนลด",        "bg": "#b7950b", "top": "#f1c40f"},
+        {"en": "CHANGE MED", "th": "เปลี่ยนยา",       "note": "อัพเดทชื่อยา",     "bg": "#16a085", "top": "#1abc9c"},
+        {"en": "EMERGENCY",  "th": "ฉุกเฉิน",          "note": "แจ้งด่วน",         "bg": "#922b21", "top": "#e74c3c"},
+    ]
+
+    def hex2rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    def get_font(size):
+        for p in [
+            "/usr/share/fonts/opentype/tlwg/Loma-Bold.otf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ]:
+            if os.path.exists(p):
+                try:
+                    return ImageFont.truetype(p, size)
+                except:
+                    pass
+        return ImageFont.load_default()
+
+    img = Image.new("RGB", (W, H), hex2rgb("#1a4731"))
+    draw = ImageDraw.Draw(img)
+    f_en   = get_font(78)
+    f_note = get_font(46)
+
+    for i, card in enumerate(CARDS):
+        c, r = i % 3, i // 3
+        x1 = c * BW + PAD
+        y1 = r * BH + PAD
+        x2 = x1 + BW - PAD * 2
+        y2 = y1 + BH - PAD * 2
+        cx = (x1 + x2) // 2
+
+        draw.rounded_rectangle([x1, y1, x2, y2], radius=40, fill=hex2rgb(card["bg"]))
+        draw.rounded_rectangle([x1+28, y1, x2-28, y1+50], radius=16, fill=hex2rgb(card["top"]))
+        draw.rectangle([x1+28, y1+25, x2-28, y1+50], fill=hex2rgb(card["top"]))
+
+        mid_y = (y1 + y2) // 2
+
+        # English label (renders ชัดเจนทุก environment)
+        try:
+            ew = int(draw.textlength(card["en"], font=f_en))
+        except:
+            ew = len(card["en"]) * 42
+        draw.text((cx - ew // 2, mid_y - 70), card["en"], font=f_en, fill=(255, 255, 255))
+
+        # Note
+        try:
+            nw = int(draw.textlength(card["note"], font=f_note))
+        except:
+            nw = len(card["note"]) * 24
+        draw.text((cx - nw // 2, mid_y + 26), card["note"], font=f_note, fill=(200, 230, 210))
+
+    # Grid lines
+    for i in [1, 2]:
+        draw.line([(i * BW, 2), (i * BW, H - 2)], fill=(255, 255, 255, 20), width=3)
+    draw.line([(2, H // 2), (W - 2, H // 2)], fill=(255, 255, 255, 20), width=3)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+setup_rich_menu()
+
 
 # ─────────────────────────── WEBHOOK ────────────────────────────
 
