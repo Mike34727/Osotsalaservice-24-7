@@ -1,263 +1,266 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
-DB_NAME = "osocare.db"
+DB_PATH = "osocare.db"
+
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_conn()
     c = conn.cursor()
 
-    # Users table — เพิ่ม adr_mode และ awaiting_med
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            line_id TEXT PRIMARY KEY,
-            name TEXT,
-            med_name TEXT DEFAULT 'ยาตามใบสั่ง',
-            points INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'active',
-            registered_at TEXT,
-            adr_mode INTEGER DEFAULT 0,
-            awaiting_med INTEGER DEFAULT 0
-        )
-    """)
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        line_id TEXT PRIMARY KEY,
+        name TEXT,
+        med_name TEXT DEFAULT 'ยาตามใบสั่ง',
+        health_points INTEGER DEFAULT 0,
+        registered_at TEXT,
+        adr_mode INTEGER DEFAULT 0,
+        awaiting_med INTEGER DEFAULT 0,
+        health_log_mode INTEGER DEFAULT 0,
+        health_log_type TEXT DEFAULT ''
+    )""")
 
-    # Medication logs
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS medication_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            line_id TEXT,
-            status TEXT,
-            logged_at TEXT
-        )
-    """)
+    c.execute("""CREATE TABLE IF NOT EXISTS medication_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id TEXT,
+        status TEXT,
+        logged_at TEXT
+    )""")
 
-    # Alerts — เพิ่ม adr_description
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS alerts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            line_id TEXT,
-            level TEXT,
-            message TEXT,
-            adr_description TEXT,
-            created_at TEXT,
-            resolved INTEGER DEFAULT 0
-        )
-    """)
+    c.execute("""CREATE TABLE IF NOT EXISTS alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id TEXT,
+        level TEXT,
+        message TEXT,
+        adr_description TEXT,
+        resolved INTEGER DEFAULT 0,
+        created_at TEXT
+    )""")
 
-    # Redemptions — ประวัติการแลกแต้ม
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS redemptions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            line_id TEXT,
-            points_used INTEGER,
-            discount_thb INTEGER,
-            redeemed_at TEXT
-        )
-    """)
+    c.execute("""CREATE TABLE IF NOT EXISTS redemptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id TEXT,
+        points_used INTEGER,
+        discount_thb INTEGER,
+        redeemed_at TEXT
+    )""")
 
-    # Migration — เพิ่ม columns ถ้ายังไม่มี (สำหรับ DB เก่า)
+    c.execute("""CREATE TABLE IF NOT EXISTS health_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id TEXT,
+        log_type TEXT,
+        value TEXT,
+        logged_at TEXT
+    )""")
+
+    c.execute("""CREATE TABLE IF NOT EXISTS refill_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        line_id TEXT,
+        start_date TEXT,
+        next_date TEXT,
+        days_left INTEGER DEFAULT 30,
+        active INTEGER DEFAULT 1
+    )""")
+
+    # Migrations สำหรับ DB เก่า
     for col, definition in [
-        ("adr_mode", "INTEGER DEFAULT 0"),
-        ("awaiting_med", "INTEGER DEFAULT 0")
+        ("adr_mode",        "INTEGER DEFAULT 0"),
+        ("awaiting_med",    "INTEGER DEFAULT 0"),
+        ("health_log_mode", "INTEGER DEFAULT 0"),
+        ("health_log_type", "TEXT DEFAULT ''"),
     ]:
         try:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
-        except Exception:
+        except:
             pass
 
-    for col, definition in [
-        ("adr_description", "TEXT"),
-        ("resolved", "INTEGER DEFAULT 0")
-    ]:
-        try:
-            c.execute(f"ALTER TABLE alerts ADD COLUMN {col} {definition}")
-        except Exception:
-            pass
+    try:
+        c.execute("ALTER TABLE alerts ADD COLUMN adr_description TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE alerts ADD COLUMN resolved INTEGER DEFAULT 0")
+    except:
+        pass
 
     conn.commit()
     conn.close()
 
-# ───────────────────────────── USER ─────────────────────────────
+# ── Users ──────────────────────────────────────────────────────────
 
 def save_user(line_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        INSERT OR IGNORE INTO users (line_id, registered_at)
-        VALUES (?, ?)
-    """, (line_id, datetime.now().isoformat()))
+    conn = get_conn()
+    conn.execute("""INSERT OR IGNORE INTO users
+        (line_id, registered_at) VALUES (?, ?)""",
+        (line_id, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
 def get_user(line_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE line_id = ?", (line_id,))
-    row = c.fetchone()
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM users WHERE line_id=?", (line_id,)).fetchone()
     conn.close()
-    if row:
-        return {
-            "line_id": row[0],
-            "name": row[1],
-            "med_name": row[2],
-            "points": row[3],
-            "status": row[4],
-            "registered_at": row[5],
-            "adr_mode": row[6] if len(row) > 6 else 0,
-            "awaiting_med": row[7] if len(row) > 7 else 0
-        }
-    return None
-
-def get_all_active_users():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT line_id, name, med_name FROM users WHERE status = 'active'")
-    rows = c.fetchall()
-    conn.close()
-    return [{"line_id": r[0], "name": r[1], "med_name": r[2]} for r in rows]
-
-def get_all_users_detail():
-    """สำหรับ Dashboard เภสัชกร"""
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        SELECT u.line_id, u.name, u.med_name, u.points, u.status, u.registered_at,
-               COUNT(CASE WHEN ml.status = 'taken' THEN 1 END) as taken_count,
-               COUNT(CASE WHEN ml.status = 'skipped' THEN 1 END) as skipped_count,
-               COUNT(ml.id) as total_logs
-        FROM users u
-        LEFT JOIN medication_logs ml ON u.line_id = ml.line_id
-        GROUP BY u.line_id
-        ORDER BY u.registered_at DESC
-    """)
-    rows = c.fetchall()
-    conn.close()
-    return [{
-        "line_id": r[0],
-        "name": r[1] or "ไม่ระบุ",
-        "med_name": r[2] or "ไม่ระบุ",
-        "points": r[3],
-        "status": r[4],
-        "registered_at": r[5],
-        "taken_count": r[6],
-        "skipped_count": r[7],
-        "total_logs": r[8],
-        "adherence": round(r[6] / r[8] * 100) if r[8] > 0 else 0
-    } for r in rows]
+    return dict(row) if row else None
 
 def update_user_name(line_id, name):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET name = ? WHERE line_id = ?", (name, line_id))
+    conn = get_conn()
+    conn.execute("UPDATE users SET name=? WHERE line_id=?", (name, line_id))
     conn.commit()
     conn.close()
 
 def update_user_med(line_id, med_name):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET med_name = ?, awaiting_med = 0 WHERE line_id = ?",
-              (med_name, line_id))
+    conn = get_conn()
+    conn.execute("UPDATE users SET med_name=?, awaiting_med=0 WHERE line_id=?",
+                 (med_name, line_id))
     conn.commit()
     conn.close()
 
-def set_awaiting_med(line_id, value=1):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET awaiting_med = ? WHERE line_id = ?", (value, line_id))
+def set_awaiting_med(line_id, val):
+    conn = get_conn()
+    conn.execute("UPDATE users SET awaiting_med=? WHERE line_id=?", (val, line_id))
     conn.commit()
     conn.close()
 
-def set_adr_mode(line_id, value=1):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET adr_mode = ? WHERE line_id = ?", (value, line_id))
+def set_adr_mode(line_id, val):
+    conn = get_conn()
+    conn.execute("UPDATE users SET adr_mode=? WHERE line_id=?", (val, line_id))
     conn.commit()
     conn.close()
 
-# ─────────────────────────── MEDICATION ─────────────────────────
+def set_health_log_mode(line_id, val, log_type=""):
+    conn = get_conn()
+    conn.execute("UPDATE users SET health_log_mode=?, health_log_type=? WHERE line_id=?",
+                 (val, log_type, line_id))
+    conn.commit()
+    conn.close()
+
+def get_all_active_users():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM users WHERE name IS NOT NULL").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+# ── Medication Logs ────────────────────────────────────────────────
 
 def log_medication(line_id, status):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO medication_logs (line_id, status, logged_at)
-        VALUES (?, ?, ?)
-    """, (line_id, status, datetime.now().isoformat()))
+    conn = get_conn()
+    conn.execute("INSERT INTO medication_logs (line_id, status, logged_at) VALUES (?,?,?)",
+                 (line_id, status, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
-# ─────────────────────────── POINTS ─────────────────────────────
+def get_recent_med_logs(line_id, days=7):
+    since = (datetime.now() - timedelta(days=days)).isoformat()
+    conn  = get_conn()
+    rows  = conn.execute("""SELECT * FROM medication_logs
+        WHERE line_id=? AND logged_at>=? ORDER BY logged_at DESC""",
+        (line_id, since)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
-def add_points(line_id, pts):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET points = points + ? WHERE line_id = ?", (pts, line_id))
+# ── Health Logs ────────────────────────────────────────────────────
+
+def save_health_log(line_id, value, log_type="general"):
+    conn = get_conn()
+    # Get log_type from user state if not provided
+    user = conn.execute("SELECT health_log_type FROM users WHERE line_id=?",
+                        (line_id,)).fetchone()
+    if user and user["health_log_type"]:
+        log_type = user["health_log_type"]
+    conn.execute("INSERT INTO health_logs (line_id, log_type, value, logged_at) VALUES (?,?,?,?)",
+                 (line_id, log_type, value, datetime.now().isoformat()))
     conn.commit()
     conn.close()
+
+def get_health_logs(line_id, limit=5):
+    conn = get_conn()
+    rows = conn.execute("""SELECT * FROM health_logs WHERE line_id=?
+        ORDER BY logged_at DESC LIMIT ?""", (line_id, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+# ── Points ─────────────────────────────────────────────────────────
 
 def get_points(line_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT points FROM users WHERE line_id = ?", (line_id,))
-    row = c.fetchone()
+    conn = get_conn()
+    row  = conn.execute("SELECT health_points FROM users WHERE line_id=?",
+                        (line_id,)).fetchone()
     conn.close()
-    return row[0] if row else 0
+    return row["health_points"] if row else 0
+
+def add_points(line_id, pts):
+    conn = get_conn()
+    conn.execute("UPDATE users SET health_points = health_points + ? WHERE line_id=?",
+                 (pts, line_id))
+    conn.commit()
+    conn.close()
 
 def redeem_points(line_id, points_used, discount_thb):
-    """หักแต้มและบันทึกการแลก"""
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET points = points - ? WHERE line_id = ?",
-              (points_used, line_id))
-    c.execute("""
-        INSERT INTO redemptions (line_id, points_used, discount_thb, redeemed_at)
-        VALUES (?, ?, ?, ?)
-    """, (line_id, points_used, discount_thb, datetime.now().isoformat()))
+    conn = get_conn()
+    conn.execute("UPDATE users SET health_points = health_points - ? WHERE line_id=?",
+                 (points_used, line_id))
+    conn.execute("INSERT INTO redemptions (line_id, points_used, discount_thb, redeemed_at) VALUES (?,?,?,?)",
+                 (line_id, points_used, discount_thb, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
 def get_redemption_history(line_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        SELECT points_used, discount_thb, redeemed_at
-        FROM redemptions WHERE line_id = ?
-        ORDER BY redeemed_at DESC LIMIT 5
-    """, (line_id,))
-    rows = c.fetchall()
+    conn = get_conn()
+    rows = conn.execute("""SELECT * FROM redemptions WHERE line_id=?
+        ORDER BY redeemed_at DESC LIMIT 5""", (line_id,)).fetchall()
     conn.close()
-    return [{"points_used": r[0], "discount_thb": r[1], "redeemed_at": r[2]} for r in rows]
+    return [dict(r) for r in rows]
 
-# ─────────────────────────── ALERTS ─────────────────────────────
+# ── Alerts ─────────────────────────────────────────────────────────
 
 def save_alert(line_id, level, message, adr_description=None):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO alerts (line_id, level, message, adr_description, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (line_id, level, message, adr_description, datetime.now().isoformat()))
+    conn = get_conn()
+    conn.execute("""INSERT INTO alerts (line_id, level, message, adr_description, created_at)
+        VALUES (?,?,?,?,?)""",
+        (line_id, level, message, adr_description, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
 def get_recent_alerts(limit=20):
-    """สำหรับ Dashboard เภสัชกร"""
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("""
-        SELECT a.id, u.name, a.level, a.message, a.adr_description, a.created_at, a.resolved
-        FROM alerts a
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT a.*, u.name FROM alerts a
         LEFT JOIN users u ON a.line_id = u.line_id
-        ORDER BY a.created_at DESC LIMIT ?
-    """, (limit,))
-    rows = c.fetchall()
+        ORDER BY a.created_at DESC LIMIT ?""", (limit,)).fetchall()
     conn.close()
-    return [{
-        "id": r[0],
-        "name": r[1] or "ไม่ระบุ",
-        "level": r[2],
-        "message": r[3],
-        "adr_description": r[4],
-        "created_at": r[5],
-        "resolved": r[6]
-    } for r in rows]
+    return [dict(r) for r in rows]
+
+# ── Refill ─────────────────────────────────────────────────────────
+
+def get_refill_status(line_id):
+    conn  = get_conn()
+    row   = conn.execute("""SELECT * FROM refill_subscriptions
+        WHERE line_id=? AND active=1 ORDER BY id DESC LIMIT 1""",
+        (line_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+# ── Dashboard ──────────────────────────────────────────────────────
+
+def get_all_users_detail():
+    conn  = get_conn()
+    users = conn.execute("SELECT * FROM users WHERE name IS NOT NULL").fetchall()
+    result = []
+    for u in users:
+        lid = u["line_id"]
+        taken   = conn.execute("SELECT COUNT(*) as n FROM medication_logs WHERE line_id=? AND status='taken'",   (lid,)).fetchone()["n"]
+        skipped = conn.execute("SELECT COUNT(*) as n FROM medication_logs WHERE line_id=? AND status='skipped'", (lid,)).fetchone()["n"]
+        total   = taken + skipped
+        adherence = round(taken / total * 100) if total > 0 else 0
+        d = dict(u)
+        d["taken_count"]   = taken
+        d["skipped_count"] = skipped
+        d["adherence"]     = adherence
+        d["points"]        = u["health_points"]
+        result.append(d)
+    conn.close()
+    return result
