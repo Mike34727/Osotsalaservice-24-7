@@ -52,7 +52,7 @@ def setup_rich_menu():
         "size": {"width": 2500, "height": 1686},
         "selected": True,
         "name": "Oso-Care Main Menu",
-        "chatBarText": "💊 เมนู Oso-Care — แตะเพื่อเปิด",
+        "chatBarText": "💊 เมนูหลัก",
         "areas": [
             {
                 "bounds": {"x": 0,    "y": 0,   "width": 833, "height": 843},
