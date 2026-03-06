@@ -10,8 +10,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             line_id TEXT PRIMARY KEY,
             name TEXT,
-            med_name TEXT,
-            med_time TEXT DEFAULT '08:00',
+            med_name TEXT DEFAULT 'ยาตามใบสั่ง',
             points INTEGER DEFAULT 0,
             status TEXT DEFAULT 'active',
             registered_at TEXT
@@ -31,20 +30,19 @@ def init_db():
             line_id TEXT,
             level TEXT,
             message TEXT,
-            created_at TEXT,
-            resolved INTEGER DEFAULT 0
+            created_at TEXT
         )
     """)
     conn.commit()
     conn.close()
 
-def save_user(line_id, name="", med_name="ยาตามใบสั่ง"):
+def save_user(line_id):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute("""
-        INSERT OR IGNORE INTO users (line_id, name, med_name, registered_at)
-        VALUES (?, ?, ?, ?)
-    """, (line_id, name, med_name, datetime.now().isoformat()))
+        INSERT OR IGNORE INTO users (line_id, registered_at)
+        VALUES (?, ?)
+    """, (line_id, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
@@ -56,19 +54,28 @@ def get_user(line_id):
     conn.close()
     if row:
         return {
-            "line_id": row[0], "name": row[1],
-            "med_name": row[2], "med_time": row[3],
-            "points": row[4], "status": row[5]
+            "line_id": row[0],
+            "name": row[1],
+            "med_name": row[2],
+            "points": row[3],
+            "status": row[4]
         }
     return None
 
 def get_all_active_users():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE status = 'active'")
+    c.execute("SELECT line_id, name, med_name FROM users WHERE status = 'active'")
     rows = c.fetchall()
     conn.close()
     return [{"line_id": r[0], "name": r[1], "med_name": r[2]} for r in rows]
+
+def update_user_name(line_id, name):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("UPDATE users SET name = ? WHERE line_id = ?", (name, line_id))
+    conn.commit()
+    conn.close()
 
 def log_medication(line_id, status):
     conn = sqlite3.connect(DB_NAME)
@@ -102,12 +109,5 @@ def save_alert(line_id, level, message):
         INSERT INTO alerts (line_id, level, message, created_at)
         VALUES (?, ?, ?, ?)
     """, (line_id, level, message, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-
-def update_user_name(line_id, name):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE users SET name = ? WHERE line_id = ?", (name, line_id))
     conn.commit()
     conn.close()
