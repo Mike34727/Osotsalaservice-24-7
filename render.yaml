@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: osocare-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: CHANNEL_SECRET
+        sync: false
+      - key: CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: PHARMACIST_LINE_ID
+        sync: false
