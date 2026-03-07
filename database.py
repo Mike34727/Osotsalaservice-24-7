@@ -21,7 +21,8 @@ def init_db():
         adr_mode INTEGER DEFAULT 0,
         awaiting_med INTEGER DEFAULT 0,
         health_log_mode INTEGER DEFAULT 0,
-        health_log_type TEXT DEFAULT ''
+        health_log_type TEXT DEFAULT '',
+        ask_mode INTEGER DEFAULT 0
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS medication_logs (
@@ -72,6 +73,7 @@ def init_db():
         ("awaiting_med",    "INTEGER DEFAULT 0"),
         ("health_log_mode", "INTEGER DEFAULT 0"),
         ("health_log_type", "TEXT DEFAULT ''"),
+        ("ask_mode",        "INTEGER DEFAULT 0"),
     ]:
         try:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
@@ -128,6 +130,12 @@ def set_awaiting_med(line_id, val):
 def set_adr_mode(line_id, val):
     conn = get_conn()
     conn.execute("UPDATE users SET adr_mode=? WHERE line_id=?", (val, line_id))
+    conn.commit()
+    conn.close()
+
+def set_ask_mode(line_id, val):
+    conn = get_conn()
+    conn.execute("UPDATE users SET ask_mode=? WHERE line_id=?", (val, line_id))
     conn.commit()
     conn.close()
 
