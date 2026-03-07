@@ -432,6 +432,15 @@ def handle_postback(event):
 
     # ── กินยาแล้ว (จากทั้ง reminder และ ตารางทานยา) ──
     if action == "taken":
+        today_str = now_bkk().strftime("%Y-%m-%d")
+        if db.check_taken_today(user_id, today_str):
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"✅ คุณ{name} บันทึกการกินยาวันนี้ไปแล้วนะคะ\nกินยาพรุ่งนี้ตามเวลาด้วยนะคะ 💊"
+                )
+            )
+            return
         db.log_medication(user_id, "taken")
         db.add_points(user_id, 10)
         points = db.get_points(user_id)
