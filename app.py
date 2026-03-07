@@ -415,7 +415,7 @@ def handle_message(event):
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(
-            text="กดปุ่มเมนูด้านล่างได้เลยนะคะ 😊\nหรือพิมพ์ 'ฉุกเฉิน' หากมีอาการเร่งด่วนค่ะ"
+            text="กดปุ่มเมนูด้านล่างได้เลยนะคะ 😊"
         )
     )
 
