@@ -179,6 +179,18 @@ def handle_message(event):
         )
         return
 
+    # ── Ask Pharmacist Mode (รอรับคำถาม) ──
+    if user and user.get("ask_mode"):
+        db.set_ask_mode(user_id, 0)
+        notify_pharmacist(user_id, "💬 ผู้ป่วยถามเรื่องยา", adr_text=text)
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(
+                text="✅ ได้รับคำถามแล้วค่ะ\nเภสัชกรจะตอบกลับเร็วๆ นี้นะคะ 💙\n\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊\n\n💡 หากมีเหตุฉุกเฉิน พิมพ์ \'ฉุกเฉิน\' ได้ทันทีเลยค่ะ"
+            )
+        )
+        return
+
     # ── Health log mode (บันทึกค่าสุขภาพ) ──
     if user and user.get("health_log_mode"):
         log_type = user.get("health_log_type", "")
@@ -563,11 +575,11 @@ def handle_postback(event):
 
     # ── ปรึกษาเภสัชกร ──
     elif action == "ask_pharmacist":
-        notify_pharmacist(user_id, "💬 ผู้ป่วยต้องการปรึกษาเรื่องยา")
+        db.set_ask_mode(user_id, 1)
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text="✅ ได้รับคำถามแล้วค่ะ\nเภสัชกรจะตอบกลับเร็วๆ นี้นะคะ 💙\n\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊\n\n💡 หากมีเหตุฉุกเฉิน พิมพ์ 'ฉุกเฉิน' ได้ทันทีเลยค่ะ"
+                text="📝 พิมพ์คำถามเรื่องยาของคุณได้เลยนะคะ 💊\n\nเภสัชกรจะตอบกลับเร็วๆ นี้ค่ะ"
             )
         )
 
