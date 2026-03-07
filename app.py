@@ -182,37 +182,14 @@ def handle_message(event):
     # ── Health log mode (บันทึกค่าสุขภาพ) ──
     if user and user.get("health_log_mode"):
         log_type = user.get("health_log_type", "")
-
-        # บันทึกค่าที่พิมพ์มา
         db.save_health_log(user_id, text, log_type)
         db.set_health_log_mode(user_id, 0)
-
-        # ลำดับการถาม: bp → sugar → weight → จบ
-        SEQUENCE = ["bp", "sugar", "weight"]
-        LABELS   = {
-            "bp":     ("💉 น้ำตาลในเลือด", "พิมพ์ค่าน้ำตาลในเลือด (เช่น 95)ค่ะ"),
-            "sugar":  ("⚖️ น้ำหนัก",        "พิมพ์น้ำหนักตัว (เช่น 58)ค่ะ"),
-            "weight": None,  # จบแล้ว
-        }
-
-        next_type = LABELS.get(log_type)
-        if next_type:
-            # ยังมีค่าถัดไป → ถามต่อ
-            label, prompt = next_type
-            next_key = SEQUENCE[SEQUENCE.index(log_type) + 1]
-            db.set_health_log_mode(user_id, 1, next_key)
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=f"✅ บันทึกแล้วค่ะ!\n\nต่อไป {label}\n📝 {prompt}")
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(
+                text="✅ ได้รับข้อมูลแล้วค่ะ\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊"
             )
-        else:
-            # ครบ 3 ค่าแล้ว → จบ
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text="✅ บันทึกค่าสุขภาพครบแล้วค่ะ!\n\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊"
-                )
-            )
+        )
         return
 
     # ══════════════════════════════════════════
@@ -277,16 +254,32 @@ def handle_message(event):
                 [f"• {l['logged_at'][:10]}  →  {l['value']}" for l in logs]
             )
 
-        # เริ่มต้นถามความดันก่อนเลย แล้วไหลต่อไป sugar → weight อัตโนมัติ
-        db.set_health_log_mode(user_id, 1, "bp")
         line_bot_api.reply_message(
             event.reply_token,
             [
                 TextSendMessage(
                     text=f"📈 สมุดบันทึกสุขภาพ คุณ{name}\n\n5 รายการล่าสุด:\n{history_text}"
                 ),
-                TextSendMessage(
-                    text="📊 บันทึกค่าสุขภาพวันนี้กันเลยนะคะ!\n\n🩸 พิมพ์ค่าความดันโลหิต (เช่น 130/80) ได้เลยค่ะ"
+                TemplateSendMessage(
+                    alt_text="บันทึกค่าสุขภาพ",
+                    template=ButtonsTemplate(
+                        title="📊 บันทึกค่าสุขภาพวันนี้",
+                        text="เลือกสิ่งที่ต้องการบันทึกค่ะ",
+                        actions=[
+                            PostbackTemplateAction(
+                                label="🩸 ความดันโลหิต",
+                                data="action=log_health&type=bp"
+                            ),
+                            PostbackTemplateAction(
+                                label="🍬 น้ำตาลในเลือด",
+                                data="action=log_health&type=sugar"
+                            ),
+                            PostbackTemplateAction(
+                                label="⚖️ น้ำหนัก",
+                                data="action=log_health&type=weight"
+                            ),
+                        ]
+                    )
                 )
             ]
         )
