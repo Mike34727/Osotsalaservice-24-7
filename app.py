@@ -714,6 +714,15 @@ def dashboard():
         alert_count=len(alerts), total_points=total_points
     )
 
+
+@app.route("/reset_menu")
+def reset_menu():
+    pw = request.args.get("pw", "")
+    if pw != DASHBOARD_PASSWORD:
+        return "Unauthorized", 403
+    setup_rich_menu()
+    return "Rich Menu reset done! Check Railway logs.", 200
+
 @app.route("/", methods=["GET"])
 def index():
     return "Oso-Care Bot is running! 💊"
