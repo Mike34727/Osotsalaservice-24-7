@@ -174,15 +174,18 @@ def get_recent_med_logs(line_id, days=7):
 
 # ── Health Logs ────────────────────────────────────────────────────
 
-def save_health_log(line_id, value, log_type="general"):
+def save_health_log(line_id, value, log_type="general", logged_at=None):
     conn = get_conn()
     # Get log_type from user state if not provided
     user = conn.execute("SELECT health_log_type FROM users WHERE line_id=?",
                         (line_id,)).fetchone()
     if user and user["health_log_type"]:
         log_type = user["health_log_type"]
+    # ใช้ logged_at ที่ส่งมา (Bangkok time) ถ้าไม่มีค่อย fallback
+    if not logged_at:
+        logged_at = datetime.now().isoformat()
     conn.execute("INSERT INTO health_logs (line_id, log_type, value, logged_at) VALUES (?,?,?,?)",
-                 (line_id, log_type, value, datetime.now().isoformat()))
+                 (line_id, log_type, value, logged_at))
     conn.commit()
     conn.close()
 
