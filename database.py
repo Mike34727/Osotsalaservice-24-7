@@ -138,6 +138,16 @@ def set_health_log_mode(line_id, val, log_type=""):
     conn.commit()
     conn.close()
 
+
+def check_taken_today(line_id, date_str):
+    """ตรวจว่า user กินยาวันนี้แล้วหรือยัง"""
+    conn = get_conn()
+    row = conn.execute("""SELECT COUNT(*) as n FROM medication_logs
+        WHERE line_id=? AND status='taken' AND logged_at LIKE ?""",
+        (line_id, f"{date_str}%")).fetchone()
+    conn.close()
+    return row["n"] > 0
+
 def get_all_active_users():
     conn = get_conn()
     rows = conn.execute("SELECT * FROM users WHERE name IS NOT NULL").fetchall()
