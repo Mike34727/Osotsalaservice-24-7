@@ -708,12 +708,36 @@ tr:hover td{background:#f9fdfb}
 </div></body></html>
 """
 
+def utc_to_bkk(dt_str):
+    """แปลง UTC datetime string เป็น Bangkok time string"""
+    if not dt_str:
+        return dt_str
+    try:
+        # รองรับทั้ง "2026-03-07T09:33:00" และ "2026-03-07 09:33:00"
+        dt_str_clean = dt_str.replace("T", " ")[:19]
+        utc_dt = datetime.strptime(dt_str_clean, "%Y-%m-%d %H:%M:%S")
+        utc_dt = pytz.utc.localize(utc_dt)
+        bkk_dt = utc_dt.astimezone(BANGKOK)
+        return bkk_dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return dt_str[:16]
+
 @app.route("/dashboard")
 def dashboard():
     if request.args.get("pw","") != DASHBOARD_PASSWORD:
         return "<h3 style='font-family:sans-serif;padding:40px;color:#c0392b'>❌ Password ไม่ถูกต้องค่ะ<br><small>เช่น /dashboard?pw=osocare2026</small></h3>", 403
     users          = db.get_all_users_detail()
     alerts         = db.get_recent_alerts(20)
+
+    # แปลงเวลาทุก alert เป็น Bangkok time
+    for a in alerts:
+        a["created_at"] = utc_to_bkk(a.get("created_at", ""))
+
+    # แปลงเวลาลงทะเบียนของ users ด้วย
+    for u in users:
+        if u.get("registered_at"):
+            u["registered_at"] = utc_to_bkk(u["registered_at"])
+
     total_users    = len(users)
     avg_adherence  = round(sum(u["adherence"] for u in users)/total_users) if total_users else 0
     total_points   = sum(u["points"] for u in users)
