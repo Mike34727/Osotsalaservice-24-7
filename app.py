@@ -1,7 +1,12 @@
 import os
 import base64
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+
+BANGKOK = pytz.timezone('Asia/Bangkok')
+def now_bkk():
+    return datetime.now(BANGKOK)
 from flask import Flask, request, abort, render_template_string
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -50,25 +55,25 @@ def setup_rich_menu():
         print(f"Rich Menu cleanup error: {e}")
 
     menu_body = {
-        "size": {"width": 2500, "height": 1686},
+        "size": {"width": 2500, "height": 843},
         "selected": True,
         "name": "Oso-Care Menu",
         "chatBarText": "Oso-Care Menu",
         "areas": [
             # แถวบน
-            {"bounds": {"x": 0,    "y": 0,   "width": 833, "height": 843},
+            {"bounds": {"x": 0,    "y": 0,   "width": 833, "height": 421},
              "action": {"type": "message", "text": "ตารางทานยา"}},
-            {"bounds": {"x": 833,  "y": 0,   "width": 834, "height": 843},
+            {"bounds": {"x": 833,  "y": 0,   "width": 834, "height": 421},
              "action": {"type": "postback", "data": "action=adr",
                         "displayText": "แจ้งอาการผิดปกติ"}},
-            {"bounds": {"x": 1667, "y": 0,   "width": 833, "height": 843},
+            {"bounds": {"x": 1667, "y": 0,   "width": 833, "height": 421},
              "action": {"type": "message", "text": "บันทึกสุขภาพ"}},
             # แถวล่าง
-            {"bounds": {"x": 0,    "y": 843, "width": 833, "height": 843},
+            {"bounds": {"x": 0,    "y": 421, "width": 833, "height": 422},
              "action": {"type": "message", "text": "สถานะกล่องยา"}},
-            {"bounds": {"x": 833,  "y": 843, "width": 834, "height": 843},
+            {"bounds": {"x": 833,  "y": 421, "width": 834, "height": 422},
              "action": {"type": "message", "text": "แต้มของฉัน"}},
-            {"bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
+            {"bounds": {"x": 1667, "y": 421, "width": 833, "height": 422},
              "action": {"type": "message", "text": "ปรึกษาเภสัชกร"}},
         ]
     }
@@ -430,7 +435,7 @@ def handle_postback(event):
         db.log_medication(user_id, "taken")
         db.add_points(user_id, 10)
         points = db.get_points(user_id)
-        now    = datetime.now().strftime("%H:%M น.")
+        now    = now_bkk().strftime("%H:%M น.")
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
