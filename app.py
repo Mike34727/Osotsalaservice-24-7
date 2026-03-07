@@ -182,22 +182,15 @@ def handle_message(event):
     # ── Health log mode (บันทึกค่าสุขภาพ) ──
     if user and user.get("health_log_mode"):
         log_type = user.get("health_log_type", "")
-        db.save_health_log(user_id, text, log_type)
+        db.save_health_log(user_id, text, log_type, logged_at=now_bkk().strftime("%Y-%m-%d %H:%M:%S"))
         db.set_health_log_mode(user_id, 0)
 
         # เช็คว่ายังมีค่าที่ยังไม่ได้กรอกอีกไหม
         # เปรียบเทียบด้วย Bangkok date เสมอ
         today_logs = db.get_health_logs(user_id, limit=20)
         today_str  = now_bkk().strftime("%Y-%m-%d")
-        import pytz as _pytz
-        def _to_bkk_date(dt_str):
-            try:
-                dt = datetime.strptime(dt_str[:19].replace("T"," "), "%Y-%m-%d %H:%M:%S")
-                dt = _pytz.utc.localize(dt).astimezone(BANGKOK)
-                return dt.strftime("%Y-%m-%d")
-            except:
-                return dt_str[:10]
-        today_types = {l["log_type"] for l in today_logs if _to_bkk_date(l["logged_at"]) == today_str}
+        # logged_at เก็บเป็น isoformat() ของ Bangkok time โดยตรง จึงเทียบ date string ตรงๆ ได้เลย
+        today_types = {l["log_type"] for l in today_logs if l["logged_at"][:10] == today_str}
         remaining_actions = []
         if "bp"     not in today_types:
             remaining_actions.append(PostbackTemplateAction(label="🩸 ความดันโลหิต",   data="action=log_health&type=bp"))
@@ -504,7 +497,7 @@ def handle_postback(event):
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text="📝 กรุณาพิมพ์อธิบายอาการที่ผิดปกติของคุณนะคะ\n\nเช่น: ปวดหัว มึนงง คลื่นไส้ ผื่นขึ้น หรืออาการอื่นๆ\n\n⚠️ หากอาการรุนแรงให้โทร 1669 ทันทีค่ะ"
+                text="📝 กรุณาพิมพ์อธิบายอาการที่ผิดปกติของคุณนะคะ\n\nเช่น: ปวดหัว มึนงง คลื่นไส้ ผื่นขึ้น หรืออาการอื่นๆ"
             )
         )
 
