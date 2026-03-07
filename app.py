@@ -55,25 +55,25 @@ def setup_rich_menu():
         print(f"Rich Menu cleanup error: {e}")
 
     menu_body = {
-        "size": {"width": 2500, "height": 843},
+        "size": {"width": 2500, "height": 1686},
         "selected": True,
         "name": "Oso-Care Menu",
         "chatBarText": "Oso-Care Menu",
         "areas": [
             # แถวบน
-            {"bounds": {"x": 0,    "y": 0,   "width": 833, "height": 421},
+            {"bounds": {"x": 0,    "y": 0,   "width": 833, "height": 843},
              "action": {"type": "message", "text": "ตารางทานยา"}},
-            {"bounds": {"x": 833,  "y": 0,   "width": 834, "height": 421},
+            {"bounds": {"x": 833,  "y": 0,   "width": 834, "height": 843},
              "action": {"type": "postback", "data": "action=adr",
                         "displayText": "แจ้งอาการผิดปกติ"}},
-            {"bounds": {"x": 1667, "y": 0,   "width": 833, "height": 421},
+            {"bounds": {"x": 1667, "y": 0,   "width": 833, "height": 843},
              "action": {"type": "message", "text": "บันทึกสุขภาพ"}},
             # แถวล่าง
-            {"bounds": {"x": 0,    "y": 421, "width": 833, "height": 422},
+            {"bounds": {"x": 0,    "y": 843, "width": 833, "height": 843},
              "action": {"type": "message", "text": "สถานะกล่องยา"}},
-            {"bounds": {"x": 833,  "y": 421, "width": 834, "height": 422},
+            {"bounds": {"x": 833,  "y": 843, "width": 834, "height": 843},
              "action": {"type": "message", "text": "แต้มของฉัน"}},
-            {"bounds": {"x": 1667, "y": 421, "width": 833, "height": 422},
+            {"bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
              "action": {"type": "message", "text": "ปรึกษาเภสัชกร"}},
         ]
     }
