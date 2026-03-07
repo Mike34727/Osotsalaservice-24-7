@@ -184,12 +184,40 @@ def handle_message(event):
         log_type = user.get("health_log_type", "")
         db.save_health_log(user_id, text, log_type)
         db.set_health_log_mode(user_id, 0)
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(
-                text="✅ ได้รับข้อมูลแล้วค่ะ\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊"
+
+        # เช็คว่ายังมีค่าที่ยังไม่ได้กรอกอีกไหม
+        today_logs = db.get_health_logs(user_id, limit=10)
+        today_str  = now_bkk().strftime("%Y-%m-%d")
+        today_types = {l["log_type"] for l in today_logs if l["logged_at"][:10] == today_str}
+        remaining_actions = []
+        if "bp"     not in today_types:
+            remaining_actions.append(PostbackTemplateAction(label="🩸 ความดันโลหิต",   data="action=log_health&type=bp"))
+        if "sugar"  not in today_types:
+            remaining_actions.append(PostbackTemplateAction(label="🍬 น้ำตาลในเลือด",  data="action=log_health&type=sugar"))
+        if "weight" not in today_types:
+            remaining_actions.append(PostbackTemplateAction(label="⚖️ น้ำหนัก",         data="action=log_health&type=weight"))
+
+        if remaining_actions:
+            # ยังมีค่าที่เหลือ → แสดงปุ่มที่เหลือ
+            line_bot_api.reply_message(
+                event.reply_token,
+                TemplateSendMessage(
+                    alt_text="กรอกค่าสุขภาพที่เหลือ",
+                    template=ButtonsTemplate(
+                        title="📊 บันทึกค่าสุขภาพ",
+                        text="กดปุ่มเพื่อกรอกค่าข้อมูลสุขภาพที่เหลือได้เลยค่ะ",
+                        actions=remaining_actions[:3]
+                    )
+                )
             )
-        )
+        else:
+            # ครบ 3 ค่าแล้ว
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="✅ ได้รับข้อมูลแล้วค่ะ\nกดปุ่มเมนูเพื่อใช้งานต่อได้เลยค่ะ 😊"
+                )
+            )
         return
 
     # ══════════════════════════════════════════
